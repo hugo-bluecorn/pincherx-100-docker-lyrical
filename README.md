@@ -56,8 +56,11 @@ Full per-component justification: [`CLAUDE.md`](CLAUDE.md) and
 ## Status
 
 **Phase 0** — repo scaffolded; architectural research complete and
-cited; foundational `CLAUDE.md` drafted. **No phase work has executed
-yet** on hardware.
+cited; foundational `CLAUDE.md` drafted; prototype `docker/Dockerfile`
+and `compose.yaml` landed and empirically verified end-to-end (router
++ talker + listener communicating across Docker network namespaces via
+Zenoh in client mode). **Hardware work (USB, GPU, robot) has not been
+executed yet** — Phase 1 onwards.
 
 The Humble parent at
 https://github.com/hugo-bluecorn/pincherx-100-runbook is at Phase 5 done
@@ -71,11 +74,12 @@ pincherx-100-docker-lyrical/
 ├── README.md                you are here
 ├── CLAUDE.md                project rationale, architecture, constraints
 ├── LICENSE                  Apache 2.0
+├── compose.yaml             Docker Compose topology (router + clients)
+├── docker/
+│   └── Dockerfile           single base image (osrf/ros:lyrical-desktop-full-resolute + rmw_zenoh)
 ├── research/
 │   └── docker-architecture.md   primary-source research justifying every decision
 ├── runbook/                 phase-by-phase setup instructions (TBD — Phase 1 next)
-├── docker/                  Dockerfiles for controller and rviz images (TBD)
-├── compose/                 docker compose files for the documented topology (TBD)
 ├── installers/              patched Trossen installer fork (populated in Phase 2)
 └── scripts/                 utility scripts (TBD)
 ```

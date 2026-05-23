@@ -1,0 +1,86 @@
+# compose.yaml — Docker Compose v2 spec for the px100 Docker-Lyrical
+# project. Encodes the topology verified end-to-end on 2026-05-23:
+# rmw_zenohd router + ROS 2 nodes in client mode on a user-defined
+# Docker bridge network.
+#
+# Usage:
+#   docker compose up router               # router only (production-style)
+#   docker compose --profile verify up      # router + demo talker (smoke test)
+#   docker compose --profile verify down    # tear down
+#
+# Ad-hoc subscription (one-shot listener, runs with --rm):
+#   docker compose run --rm listener ros2 topic echo --once /chatter
+#   docker compose run --rm listener ros2 topic list
+#   docker compose run --rm listener bash
+#
+# Build the base image (if not already built):
+#   docker buildx build -t px100-base:dev --load docker/
+#   # or, via compose itself:
+#   docker compose build
+#
+# Notes on architecture:
+#   - rmw_zenoh defaults to mode="peer", which advertises a loopback-
+#     only listen-locator unreachable across Docker network namespaces.
+#     The clients here override to mode="client" so all comms relay
+#     through the central router. The router itself runs without
+#     ZENOH_CONFIG_OVERRIDE — overrides apply to whichever Zenoh
+#     config the process loads (session OR router); setting client
+#     mode on the router would break it.
+#   - Multicast scouting is disabled by default in rmw_zenoh; this
+#     topology relies on TCP unicast for discovery via the router.
+#     No --network=host needed; Docker's bridge networking is enough.
+
+name: px100
+
+networks:
+  default:
+    name: px100-net
+
+# YAML anchor for the shared base config — image, build context, and
+# the user-defined network. Service definitions splice this in via
+# `<<: *px100-base`.
+x-px100-base: &px100-base
+  image: px100-base:dev
+  build:
+    context: ./docker
+    dockerfile: Dockerfile
+
+# YAML anchor for the client-mode Zenoh override env block. Spliced
+# into every non-router service.
+x-zenoh-client-env: &zenoh-client-env
+  RMW_IMPLEMENTATION: rmw_zenoh_cpp
+  ZENOH_CONFIG_OVERRIDE: 'mode="client";connect/endpoints=["tcp/router:7447"]'
+
+services:
+  # The central Zenoh router. Always present in the topology.
+  router:
+    <<: *px100-base
+    container_name: router
+    command: ros2 run rmw_zenoh_cpp rmw_zenohd
+    restart: unless-stopped
+
+  # Demo talker, behind the `verify` profile. Not part of the
+  # production topology; only spun up when explicitly running the
+  # smoke test (e.g., `docker compose --profile verify up`).
+  talker:
+    <<: *px100-base
+    container_name: talker
+    profiles: ["verify"]
+    environment:
+      <<: *zenoh-client-env
+    command: ros2 run demo_nodes_cpp talker
+    depends_on:
+      - router
+    restart: "no"
+
+  # Template for one-shot ad-hoc clients (listener, topic echo, etc.).
+  # Runs only when explicitly invoked via `docker compose run --rm
+  # listener <command>` — never started by `docker compose up`.
+  listener:
+    <<: *px100-base
+    profiles: ["adhoc"]
+    environment:
+      <<: *zenoh-client-env
+    depends_on:
+      - router
+    # No `command:` — supplied at `docker compose run` time.
