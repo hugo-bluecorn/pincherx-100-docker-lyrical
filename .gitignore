@@ -1,0 +1,12 @@
+# Editor cruft
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Generated files (none expected; this repo is docs + Dockerfiles + Compose)
