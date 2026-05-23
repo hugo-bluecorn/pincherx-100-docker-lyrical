@@ -109,10 +109,14 @@ from Lyrical onward.**
 
 ## Implementation phases (in order)
 
-1. **Host preparation** — install Docker engine on Ubuntu 26.04 Resolute.
-   Add user to the `docker` group. Install Trossen's udev rule at
-   `/etc/udev/rules.d/99-interbotix-udev.rules`. Verify `/dev/ttyDXL`
-   appears on U2D2 plug-in. Verify `docker run hello-world`.
+1. **Host preparation** — install Docker engine + BuildKit + Compose v2
+   on Ubuntu 26.04 Resolute via apt (`docker.io`, `docker-buildx`,
+   `docker-compose-v2`). Add user to the `docker` group with new
+   membership effective. Verify `docker run hello-world` works without
+   `sudo`. Verify `docker buildx version` and `docker compose version`
+   resolve. The Trossen udev rule install and `/dev/ttyDXL` verification
+   move to Phase 4, where the U2D2 is actually plugged in. Runbook:
+   `runbook/01-host-preparation.md`.
 2. **Image build** — single Dockerfile extending
    `osrf/ros:lyrical-desktop-full-resolute`. Install
    `ros-lyrical-rmw-zenoh-cpp`. Add the patched Trossen installer fork
@@ -127,11 +131,17 @@ from Lyrical onward.**
    router container on the network. Verify nodes in subsequent
    containers can connect by overriding session `connect.endpoints`
    to `tcp/<router-container-name>:7447`.
-4. **Controller container + USB pass-through** — launch the
-   controller container with `--device=/dev/ttyDXL:/dev/ttyDXL`,
-   `--network=pincherx100-net`, `RMW_IMPLEMENTATION=rmw_zenoh_cpp`,
-   `ZENOH_CONFIG_OVERRIDE='connect/endpoints=["tcp/router:7447"]'`.
-   Confirm `/dev/ttyDXL` appears inside the container (smoke-test the
+4. **Controller container + USB pass-through** — install Trossen's
+   `99-interbotix-udev.rules` at `/etc/udev/rules.d/` on the host
+   (relocated here from Phase 1 because it requires the U2D2 to be
+   plugged in for verification). Reload udev rules
+   (`sudo udevadm control --reload-rules && sudo udevadm trigger`),
+   plug in the U2D2, confirm `/dev/ttyDXL` symlink appears on the host.
+   Then launch the controller container with
+   `--device=/dev/ttyDXL:/dev/ttyDXL`, the
+   `ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/router:7447"]'`
+   env block, attached to the `px100-net` network. Confirm
+   `/dev/ttyDXL` appears inside the container (smoke-test the
    `--device=src:dst` symlink behavior; if it doesn't preserve the
    symlink name, fall back to entrypoint `ln -sf` or patch
    `xs_sdk_obj.h:22` to accept a port parameter).
