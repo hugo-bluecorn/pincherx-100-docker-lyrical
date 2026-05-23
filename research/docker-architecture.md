@@ -495,8 +495,16 @@ repeatability.
    │                             │   X11 socket + Wayland XWayland
    └─────────────────────────────┘
    ```
-5. **Image base**: `osrf/ros:lyrical-desktop-resolute` for rviz,
-   `osrf/ros:lyrical-ros-base-resolute` for the controller.
+5. **Image base** (revised 2026-05-23 after empirical verification):
+   single `osrf/ros:lyrical-desktop-full-resolute` for all three
+   containers. The earlier draft of this section proposed a two-image
+   split (`osrf/ros:lyrical-desktop-resolute` for rviz +
+   `osrf/ros:lyrical-ros-base-resolute` for the controller) but
+   `osrf/ros:lyrical-ros-base-resolute` does not exist — the
+   `ros-base` variants live on `library/ros` (pull as
+   `ros:lyrical-ros-base-resolute`), not on `osrf/ros`. The single
+   `desktop-full` image avoids that namespace cross-up and simplifies
+   operations at a ~2 GB per-image cost.
 6. **Trossen installer requires patching** for Lyrical:
    - Distro/version validation arrays.
    - PEP 668 venv pattern for Python deps.
@@ -526,6 +534,92 @@ repeatability.
    boundaries (replaces qcow2 disk-only snapshots from the QEMU
    runbook). Default plan: tag images with phase number after
    verification.
+
+## Empirical verification (2026-05-23)
+
+Prototype Dockerfile (`docker/Dockerfile`) built and cross-container
+Zenoh discovery + message flow tested on this Kubuntu 24.04 Noble
+development host (eventual target host is Ubuntu 26.04 Resolute).
+Findings folded back into CLAUDE.md and corrections applied to this
+document above.
+
+### Image build (BuildKit)
+
+- `docker buildx build -t px100-base:dev --load docker/` succeeded
+  in 13.1 s. Image manifest digest
+  `sha256:8b0fb4f244dbef6c615ced4f35a6df369ef90221c54230e5572418b5426ce47f`.
+  Unique content 1.91 GB.
+- The legacy `docker build` builder is deprecated upstream and prints
+  a deprecation banner; `docker buildx build --load` is the current
+  command. The `--load` flag imports the image into the local Docker
+  engine so plain `docker run` can use it.
+- The OSRF image's apt sources include
+  `packages.ros.org/ros2-testing/ubuntu resolute` in addition to
+  Ubuntu's archive. The
+  `ros-lyrical-rmw-zenoh-cpp 0.10.4-1resolute.20260430.211235`
+  package resolves from the ros2-testing repo, NOT from Ubuntu's
+  own archive. Production deployments should re-evaluate when (or if)
+  a stable Lyrical ROS apt repo is published.
+
+### Single-container Zenoh smoke test
+
+Inside one container with `RMW_IMPLEMENTATION=rmw_zenoh_cpp`:
+`apt install ros-lyrical-rmw-zenoh-cpp` → `ros2 run rmw_zenoh_cpp
+rmw_zenohd` in background → `ros2 run demo_nodes_cpp talker` →
+`ros2 topic echo --once /chatter` returned `data: 'Hello World: N'`.
+End-to-end working. Confirms the image base + apt path + Zenoh
+runtime are usable as-is.
+
+### Cross-container Zenoh test (the load-bearing result)
+
+Three containers on user-defined Docker bridge `px100-net`:
+
+```
+router      —  px100-base:dev  ros2 run rmw_zenoh_cpp rmw_zenohd
+talker      —  px100-base:dev  -e ZENOH_CONFIG_OVERRIDE=...  ros2 run demo_nodes_cpp talker
+listener    —  px100-base:dev  -e ZENOH_CONFIG_OVERRIDE=...  ros2 topic echo --once /chatter
+```
+
+- **First attempt failed.** With only `connect/endpoints` overridden
+  to `tcp/router:7447`, the talker reached the router and was
+  gossiped to the listener, but the listener could not connect to
+  the talker: the talker had advertised its listen-locator as
+  `tcp/[::1]:32949` (IPv6 loopback), which is unreachable across
+  Docker bridges. Default session `mode` is `peer`, and the default
+  `listen.endpoints` for a peer is loopback-only.
+- **Fix: switch session mode to `client`.** Override becomes
+  `mode="client";connect/endpoints=["tcp/router:7447"]`. In client
+  mode the node opens no listen socket; all comms relay through the
+  router. The listener then saw `/talker` in `ros2 node list`,
+  `/chatter` in `ros2 topic list`, and successfully echoed
+  `data: 'Hello World: 26'`.
+- **`ZENOH_CONFIG_OVERRIDE` multi-override syntax confirmed**
+  (primary source: `https://github.com/ros2/rmw_zenoh/blob/lyrical/README.md`):
+  semicolon-separated `key/path=value` pairs.
+- **Asymmetry**: overrides apply to BOTH session config (used by
+  ROS nodes) AND router config (used by `rmw_zenohd`). Setting
+  `mode="client"` on the router container would break it. The
+  router container must run without `ZENOH_CONFIG_OVERRIDE`; only
+  the non-router containers carry the override.
+- **Multicast NOT involved.** Zenoh's default scouting/multicast is
+  disabled in both router and session configs. Discovery is
+  router-mediated TCP unicast end-to-end. No Docker
+  multicast-across-netns workarounds needed.
+
+### Architectural confirmations and corrections
+
+- **Single image base sticks.** `osrf/ros:lyrical-desktop-full-resolute`
+  works for all three containers in the topology. The earlier
+  two-image-split idea was both factually wrong (one of the two
+  proposed image tags doesn't exist) and unnecessary.
+- **Bridge networking sticks.** No `--network=host` is needed.
+  Container-DNS resolves the `router` container name to its bridge
+  IP (`172.18.0.2/16` in this test).
+- **Phase-0 architecture validated end-to-end** for the basic
+  pub/sub case. The remaining unknowns concern hardware (USB
+  pass-through, X11/Wayland forwarding for rviz, GPU `/dev/dri`
+  access) and the Trossen workspace build, which Phase 2 and Phase
+  4 will exercise.
 
 ## Sources (consolidated)
 

@@ -36,8 +36,9 @@ from Lyrical onward.**
   ```
   ┌─────────────────────────┐
   │ rmw_zenohd router       │  tcp 7447
+  │  (no client override)   │
   └────────────┬────────────┘
-               │ Zenoh TCP unicast
+               │ Zenoh TCP unicast, mode=client
      ┌─────────┴──────────┐
      ▼                    ▼
   controller container   rviz container
@@ -46,11 +47,33 @@ from Lyrical onward.**
                          + /tmp/.X11-unix bind-mount
   ```
 - **Middleware**: `rmw_zenoh_cpp` from inception. No DDS, no
-  `zenoh-bridge-ros2dds`. Apt-installed as `ros-lyrical-rmw-zenoh-cpp`
-  (verified in `packages.ros.org/ros2/ubuntu/dists/resolute/`).
-- **Image bases**: `osrf/ros:lyrical-desktop-resolute` (rviz container),
-  `osrf/ros:lyrical-ros-base-resolute` (controller container). Both
-  published on Docker Hub.
+  `zenoh-bridge-ros2dds`. Installed via apt as
+  `ros-lyrical-rmw-zenoh-cpp`. In the OSRF Lyrical Docker image the
+  package resolves from `packages.ros.org/ros2-testing/ubuntu resolute`
+  (the testing repo is configured by OSRF in addition to Ubuntu's own
+  archive). Production deployments should evaluate pinning to the stable
+  ROS apt repo when one is published for Lyrical.
+- **Image base**: single `osrf/ros:lyrical-desktop-full-resolute` for
+  all three containers. The `desktop-full` variant ships rviz + the
+  full ROS desktop tooling; one image keeps build and operations simple
+  at the cost of ~2 GB per image (most layers shared with the OSRF
+  base). Custom layer adds `ros-lyrical-rmw-zenoh-cpp` and sets
+  `ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp`. See `docker/Dockerfile`.
+- **Zenoh session mode**: non-router containers run with
+  `mode="client"` (override of rmw_zenoh's default `mode="peer"`).
+  Peer mode advertises a loopback listen-locator that other containers
+  can't reach across Docker bridges; client mode relays all
+  communication through the router. The router itself runs with its
+  default config (router mode); only the talker / listener / rviz /
+  controller containers carry the override. Asymmetry is documented
+  here so the runbook's launch commands set the env var only where
+  appropriate.
+- **`ZENOH_CONFIG_OVERRIDE` syntax** (per
+  https://github.com/ros2/rmw_zenoh/blob/lyrical/README.md): semicolon-
+  separated `key/path=value` pairs. Example:
+  `mode="client";connect/endpoints=["tcp/router:7447"]`. Overrides
+  apply to whichever Zenoh config file the process is loading
+  (session for ROS nodes, router for `rmw_zenohd`).
 - **Robot**: Trossen Interbotix PincherX-100, single arm.
 - **Robot interface**: U2D2 USB-serial adapter (FTDI FT232H, vendor
   0x0403, product 0x6014). Host gets the Trossen udev rule so
@@ -90,12 +113,15 @@ from Lyrical onward.**
    Add user to the `docker` group. Install Trossen's udev rule at
    `/etc/udev/rules.d/99-interbotix-udev.rules`. Verify `/dev/ttyDXL`
    appears on U2D2 plug-in. Verify `docker run hello-world`.
-2. **Image build** — write Dockerfiles for `pincherx100-controller`
-   and `pincherx100-rviz`. FROM the respective OSRF Lyrical base
-   images. Add the patched Trossen installer fork as a build step.
-   Build the Trossen colcon workspace inside the image. Install
-   `ros-lyrical-rmw-zenoh-cpp`. Tag images at phase exit as
-   `pincherx100-controller:phase2` and `pincherx100-rviz:phase2`.
+2. **Image build** — single Dockerfile extending
+   `osrf/ros:lyrical-desktop-full-resolute`. Install
+   `ros-lyrical-rmw-zenoh-cpp`. Add the patched Trossen installer fork
+   as a build step. Build the Trossen colcon workspace inside the
+   image. Tag image at phase exit as `px100-base:phase2`. Build via
+   BuildKit (`docker buildx build --load`); legacy `docker build`
+   is deprecated upstream. A prototype scaffold of the Dockerfile
+   landed in Phase 0 at `docker/Dockerfile` (rmw_zenoh layer only;
+   Trossen workspace deferred to this phase).
 3. **Network + router** — create a user-defined Docker bridge network
    (`docker network create pincherx100-net`). Launch a `rmw_zenohd`
    router container on the network. Verify nodes in subsequent
@@ -181,6 +207,14 @@ from Lyrical onward.**
   `rmw_zenoh_cpp`. Containers need explicit
   `connect.endpoints` overrides — no "it just works on the same
   Docker bridge" without configuration.
+- **rmw_zenoh's default session mode is `peer`**, which advertises a
+  loopback-only listen-locator. Cross-container peer-to-peer fails
+  silently — the listener can discover the talker (via the router's
+  gossip) but can't connect to its loopback address. Verified
+  empirically 2026-05-23; see `research/docker-architecture.md`
+  "Empirical verification" section. Fix: every non-router container
+  sets `mode="client"` via `ZENOH_CONFIG_OVERRIDE`. The router
+  container must NOT receive this env var.
 
 ## Working conventions
 
