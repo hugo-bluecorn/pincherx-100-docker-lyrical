@@ -63,12 +63,12 @@ Key things to notice:
 | `RUN apt-get update && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-rmw-zenoh-cpp && rm -rf /var/lib/apt/lists/*` | Single-RUN apt pattern | Combining update + install + clean into one layer keeps image lean and avoids apt-cache staleness across layers. |
 | `ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp` | Default middleware | Containers default to Zenoh without per-run `-e` flags. Overridable at run time. |
 
-> **Adapt:** If you want the slimmer `ros-base` variant for production
-> deployments (no rviz, no rqt, no demos), build with
-> `--build-arg IMAGE_VARIANT=ros-base`. The `ros-base` variants live
-> on `library/ros` rather than `osrf/ros`, so you'd also need to
-> change the `FROM` line. For now, this runbook uses `desktop-full`
-> everywhere to keep one image base.
+> **Adapt:** Phase 4 splits this into two role-specific images: the
+> robot container uses `ros:lyrical-ros-base-resolute` (official
+> `library/ros` namespace — headless, ~324 MB) and the dev container
+> keeps `osrf/ros:lyrical-desktop-full-resolute`. The Dockerfile is
+> reparameterized with `BASE_IMAGE` and `EXTRA_PKGS` args; see
+> `runbook/04-topology-proof-urdf-tutorial.md` Step 1.
 
 ## Step 2 — Build with BuildKit
 

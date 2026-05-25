@@ -31,21 +31,43 @@ from Lyrical onward.**
   `rocker` for dev-loop ergonomics.
 - **Container runtime**: Docker engine (apt: `docker.io` on Resolute, or
   the upstream `docker-ce` repo per https://docs.docker.com/engine/install/ubuntu/).
-- **Topology** — three-container minimum on a user-defined Docker bridge
-  network:
+- **Topology** — two-container, two-router, federated pattern on a
+  user-defined Docker bridge network. Each container runs both
+  `rmw_zenohd` (background, started by the image entrypoint) and a
+  ROS 2 process group (foreground). The router and ROS 2 processes
+  inside each container share the container's loopback, so
+  rmw_zenoh's defaults (peer mode, `connect/endpoints:
+  ["tcp/localhost:7447"]`, `listen/endpoints: ["tcp/localhost:0"]`)
+  apply unchanged to the ROS 2 nodes. Federation between the two
+  routers is one-directional via a `connect/endpoints` override on
+  the dev-side router only; gossip propagates discovery in both
+  directions across the link:
   ```
-  ┌─────────────────────────┐
-  │ rmw_zenohd router       │  tcp 7447
-  │  (no client override)   │
-  └────────────┬────────────┘
-               │ Zenoh TCP unicast, mode=client
-     ┌─────────┴──────────┐
-     ▼                    ▼
-  controller container   rviz container
-  xs_sdk + rmw_zenoh     rviz2 + rmw_zenoh
-  --device=/dev/ttyDXL   --device=/dev/dri/renderD128
-                         + /tmp/.X11-unix bind-mount
+                  host LAN ─── port-publish 7447 ───┐
+                                                    │
+                                                    ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │ px100-net (Docker user-defined bridge)                     │
+  │                                                            │
+  │ ┌──────────────────────────┐  ┌──────────────────────────┐ │
+  │ │ robot container          │  │ dev container            │ │
+  │ │ px100-robot:dev          │  │ px100-dev:dev            │ │
+  │ │ (ros-base)               │  │ (desktop-full)           │ │
+  │ │ rmw_zenohd (bg)          │◄►│ rmw_zenohd (bg)          │ │
+  │ │   default router config  │  │   override applied via   │ │
+  │ │                          │  │   ZENOH_CONFIG_OVERRIDE  │ │
+  │ │ xs_sdk (fg, peer,        │  │ rviz2 (fg, peer,         │ │
+  │ │   default session)       │  │   default session)       │ │
+  │ │ --device=/dev/ttyDXL     │  │ --device=/dev/dri/...    │ │
+  │ │                          │  │ + /tmp/.X11-unix mount   │ │
+  │ └──────────────────────────┘  └──────────────────────────┘ │
+  └────────────────────────────────────────────────────────────┘
   ```
+  This pattern was adopted in Phase 4 (see
+  `runbook/04-topology-proof-urdf-tutorial.md`) after primary-source
+  research showed it is the rmw_zenoh-canonical layout for
+  multi-fault-domain deployment. It supersedes the earlier
+  single-shared-router + client-mode pattern from Phase 3.
 - **Middleware**: `rmw_zenoh_cpp` from inception. No DDS, no
   `zenoh-bridge-ros2dds`. Installed via apt as
   `ros-lyrical-rmw-zenoh-cpp`. In the OSRF Lyrical Docker image the
@@ -53,27 +75,49 @@ from Lyrical onward.**
   (the testing repo is configured by OSRF in addition to Ubuntu's own
   archive). Production deployments should evaluate pinning to the stable
   ROS apt repo when one is published for Lyrical.
-- **Image base**: single `osrf/ros:lyrical-desktop-full-resolute` for
-  all three containers. The `desktop-full` variant ships rviz + the
-  full ROS desktop tooling; one image keeps build and operations simple
-  at the cost of ~2 GB per image (most layers shared with the OSRF
-  base). Custom layer adds `ros-lyrical-rmw-zenoh-cpp` and sets
-  `ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp`. See `docker/Dockerfile`.
-- **Zenoh session mode**: non-router containers run with
-  `mode="client"` (override of rmw_zenoh's default `mode="peer"`).
-  Peer mode advertises a loopback listen-locator that other containers
-  can't reach across Docker bridges; client mode relays all
-  communication through the router. The router itself runs with its
-  default config (router mode); only the talker / listener / rviz /
-  controller containers carry the override. Asymmetry is documented
-  here so the runbook's launch commands set the env var only where
-  appropriate.
+- **Image base**: two role-specific images built from a single
+  parameterized `docker/Dockerfile`. The `BASE_IMAGE` arg selects the
+  upstream tier; `EXTRA_PKGS` adds per-role apt packages:
+  - **Robot** (`px100-robot:dev`): `ros:lyrical-ros-base-resolute`
+    from the official Docker Hub `library/ros` namespace (~324 MB,
+    headless — includes tf2, robot_state_publisher, urdf, xacro,
+    colcon, rosdep; no rviz, no Qt, no X11 deps).
+  - **Dev** (`px100-dev:dev`): `osrf/ros:lyrical-desktop-full-resolute`
+    from the OSRF Docker Hub namespace (~1.77 GB — adds rviz2, rqt,
+    the full ROS desktop tooling).
+  The upstream ROS Docker images are published under two namespaces:
+  `library/ros` (Docker Official Images — lean tiers: ros-core,
+  ros-base, perception) and `osrf/ros` (OSRF profile — GUI-heavy
+  tiers: desktop, desktop-full, simulation). See
+  https://hub.docker.com/_/ros and https://hub.docker.com/r/osrf/ros.
+  Both images share a common custom layer that installs
+  `ros-lyrical-rmw-zenoh-cpp`, sets
+  `ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp`, and installs a custom
+  entrypoint (`docker/entrypoint.sh`) that starts `rmw_zenohd` in
+  the background before the main command. `docker compose build`
+  builds both images. See `docker/Dockerfile` and `compose.yaml`.
+- **Zenoh session mode**: **peer mode for all ROS 2 nodes** — this
+  is rmw_zenoh's default and matches the ROS-canonical "router per
+  fault domain, peers connect via gossip" pattern documented in
+  `rmw_zenoh/README.md`. The router and its colocated peers share
+  the container's loopback, so rmw_zenoh's default
+  `connect/endpoints: ["tcp/localhost:7447"]` and
+  `listen/endpoints: ["tcp/localhost:0"]` work as designed. No
+  session overrides are needed on any ROS 2 node container.
+  Cross-container communication happens via router-to-router
+  federation (see next bullet).
 - **`ZENOH_CONFIG_OVERRIDE` syntax** (per
   https://github.com/ros2/rmw_zenoh/blob/lyrical/README.md): semicolon-
-  separated `key/path=value` pairs. Example:
-  `mode="client";connect/endpoints=["tcp/router:7447"]`. Overrides
-  apply to whichever Zenoh config file the process is loading
-  (session for ROS nodes, router for `rmw_zenohd`).
+  separated `key/path=value` pairs. Example used for the dev-side
+  router federation: `connect/endpoints=["tcp/robot:7447"]`.
+  Overrides apply to whichever Zenoh config file the process is
+  loading (session for ROS nodes, router for `rmw_zenohd`). **The
+  image entrypoint scopes the override to the router only** by
+  unsetting `ZENOH_CONFIG_OVERRIDE` after `rmw_zenohd` starts but
+  before the main command runs; otherwise the same override would
+  apply to ROS 2 nodes' session configs too, defeating the topology.
+  This scoping is the cleanest alternative to shipping a full copy
+  of the 230-line default router config file per container.
 - **Robot**: Trossen Interbotix PincherX-100, single arm.
 - **Robot interface**: U2D2 USB-serial adapter (FTDI FT232H, vendor
   0x0403, product 0x6014). Host gets the Trossen udev rule so
@@ -82,12 +126,28 @@ from Lyrical onward.**
   only; the container does not (and cannot) process udev events.
 - **Camera**: Intel RealSense D415 via USB 3.0. Deferred until arm
   control is verified end-to-end.
-- **Graphics**: containerized rviz with X11 socket bind-mount and
+- **Graphics**: containerized rviz via **XWayland**, not native Wayland.
+  Ubuntu 26.04 Resolute runs Wayland-only compositors (GNOME 50 dropped
+  its X11 backend entirely; KDE Plasma defaults to Wayland), but XWayland
+  (`xwayland` package, `main` section) is installed by default and
+  auto-started by the compositor. rviz2 **cannot run on native Wayland**
+  due to three independent X11 hard dependencies:
+  (1) `rviz2/src/main.cpp` detects Wayland and forces `-platform xcb`
+  (https://github.com/ros2/rviz/pull/1253, present on `lyrical` branch);
+  (2) `rviz_rendering/render_system.cpp` directly calls X11/GLX APIs
+  (`XOpenDisplay`, `glXChooseVisual`, `glXCreateContext`);
+  (3) the vendored OGRE 1.12.10 (`rviz_ogre_vendor`) has no Wayland
+  support — Wayland was added in OGRE 14.3.0+ behind
+  `-DOGRE_USE_WAYLAND=TRUE`, but rviz has not adopted it (tracked in
+  https://github.com/ros2/rviz/issues/847).
+  Containers bind-mount `/tmp/.X11-unix` (the XWayland socket) and
   `/dev/dri/renderD128` (Intel Iris Xe iGPU on this Dell Precision 3581).
-  Mesa userspace in the image. No NVIDIA Container Toolkit needed for
-  the default architecture. Ubuntu 26.04 GNOME defaults to Wayland;
-  rviz2 forces `QT_QPA_PLATFORM=xcb` so XWayland handles the bridge
-  (https://github.com/ros2/rviz/pull/1253).
+  `QT_QPA_PLATFORM=xcb` is set in compose for explicitness, though
+  rviz2 forces it automatically. `xhost +local:docker` grants container
+  access to the XWayland server; re-run after each reboot.
+  `joint_state_publisher_gui` (pure Qt, no OGRE) could run on native
+  Wayland, but shares the xcb setting with rviz2 for simplicity.
+  Mesa userspace in the image. No NVIDIA Container Toolkit needed.
 - **Network**: user-defined Docker bridge for inter-container Zenoh.
   Default Zenoh ports: TCP 7447 (router), UDP 7446 (multicast scout,
   disabled by default). Multicast disabled in both router and session
@@ -95,11 +155,20 @@ from Lyrical onward.**
   sidesteps the Docker-multicast-across-netns problem DDS has. No
   `--network=host` required.
 - **External middleware**: Flutter client (Bluecorn) consumes Zenoh
-  keyexpressions. `zenoh-dart` does **not** exist in the
-  `eclipse-zenoh` GitHub org; the Flutter client path uses
-  `zenoh-pico` via Dart FFI, a community Dart binding (if vetted), or
-  a REST/WebSocket bridge. Decision deferred to the
-  Phase-7-equivalent design step.
+  keyexpressions via `package:zenoh` — a Dart FFI binding over
+  zenoh-c, maintained at https://github.com/hugo-bluecorn/zenoh_dart
+  (not under the `eclipse-zenoh` org; community binding by this
+  project's author). The pattern is proven end-to-end in the
+  `zenoh-counter-flutter` template at
+  https://github.com/hugo-bluecorn/zenoh-counter-flutter, where the
+  Flutter app runs in client mode (`mode="client"`) and connects via
+  TCP over WiFi to the host's published router endpoint
+  (`tcp/<host-LAN-ip>:7447`). The phone-as-client + router-on-robot
+  shape is exactly what `rmw_zenoh/README.md` § "Connecting to the
+  Zenoh router on another host" prescribes for remote nodes. Phase 8
+  wires this in for the PincherX-100; the bridge layer
+  (`zenoh-bridge-ros2dds`) is not required because both ends speak
+  Zenoh natively.
 - **Install method**: patched Trossen `xsarm_amd64_install.sh`
   forked into `installers/`. Patch surface inherited from the
   Lyrical-Luth fork's Phase-3a plan plus containerization-specific
@@ -115,48 +184,63 @@ from Lyrical onward.**
    membership effective. Verify `docker run hello-world` works without
    `sudo`. Verify `docker buildx version` and `docker compose version`
    resolve. The Trossen udev rule install and `/dev/ttyDXL` verification
-   move to Phase 4, where the U2D2 is actually plugged in. Runbook:
+   move to Phase 5, where the U2D2 is actually plugged in. Runbook:
    `runbook/01-host-preparation.md`.
-2. **Image build** — single Dockerfile extending
-   `osrf/ros:lyrical-desktop-full-resolute`. Install
-   `ros-lyrical-rmw-zenoh-cpp`. Add the patched Trossen installer fork
-   as a build step. Build the Trossen colcon workspace inside the
-   image. Tag image at phase exit as `px100-base:phase2`. Build via
-   BuildKit (`docker buildx build --load`); legacy `docker build`
-   is deprecated upstream. A prototype scaffold of the Dockerfile
-   landed in Phase 0 at `docker/Dockerfile` (rmw_zenoh layer only;
-   Trossen workspace deferred to this phase).
-3. **Network + router** — create a user-defined Docker bridge network
-   (`docker network create pincherx100-net`). Launch a `rmw_zenohd`
-   router container on the network. Verify nodes in subsequent
-   containers can connect by overriding session `connect.endpoints`
-   to `tcp/<router-container-name>:7447`.
-4. **Controller container + USB pass-through** — install Trossen's
+2. **Image build** — single parameterized Dockerfile with `BASE_IMAGE`
+   and `EXTRA_PKGS` build args. Robot image extends
+   `ros:lyrical-ros-base-resolute` (official `library/ros`); dev
+   image extends `osrf/ros:lyrical-desktop-full-resolute` (OSRF
+   namespace). Both install `ros-lyrical-rmw-zenoh-cpp` and the
+   custom entrypoint at `/px100-entrypoint.sh`. Per-role packages
+   (e.g. `ros-lyrical-urdf-tutorial` for Phase 4) passed via
+   `EXTRA_PKGS`. Patched Trossen installer fork + colcon workspace
+   build deferred to Phase 5. Build both via `docker compose build`
+   or individually via `docker buildx build --load` with explicit
+   `--build-arg`.
+3. **Network + router (Phase 3 prototype, SUPERSEDED by Phase 4)** —
+   single-shared-router + client-mode topology validated cross-container
+   message flow as a first proof-of-life. This shape is retained as
+   historical record in `runbook/03-network-router.md` but is replaced
+   in Phase 4 by the rmw_zenoh-canonical pattern. Do not adopt the
+   Phase 3 compose.yaml for new work.
+4. **Topology proof with urdf_tutorial** — replace the single-router
+   topology with the two-container, two-router, federated pattern
+   that the rest of the project depends on. Robot container runs
+   `rmw_zenohd` + `robot_state_publisher` against the
+   `urdf_tutorial`-shipped `06-flexible.urdf`. Dev container runs
+   `rmw_zenohd` (federated to robot via
+   `ZENOH_CONFIG_OVERRIDE='connect/endpoints=["tcp/robot:7447"]'`,
+   applied via the entrypoint and scoped to the router only) +
+   `joint_state_publisher_gui` + `rviz2`. Verify bidirectional topic
+   flow: `/joint_states` (dev → robot), `/tf` +
+   `/robot_description` (robot → dev). Visually: rviz2 renders the
+   URDF and reflects slider-driven joint state changes in real time.
+   Robot-side router publishes port 7447 on the host LAN for the
+   future Phase 8 Flutter client. Runbook:
+   `runbook/04-topology-proof-urdf-tutorial.md`.
+5. **Controller container + USB pass-through** — swap the
+   `urdf_tutorial` publisher in the robot container for `xs_sdk` /
+   the patched Trossen workspace. Install Trossen's
    `99-interbotix-udev.rules` at `/etc/udev/rules.d/` on the host
    (relocated here from Phase 1 because it requires the U2D2 to be
    plugged in for verification). Reload udev rules
    (`sudo udevadm control --reload-rules && sudo udevadm trigger`),
    plug in the U2D2, confirm `/dev/ttyDXL` symlink appears on the host.
-   Then launch the controller container with
-   `--device=/dev/ttyDXL:/dev/ttyDXL`, the
-   `ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/router:7447"]'`
-   env block, attached to the `px100-net` network. Confirm
-   `/dev/ttyDXL` appears inside the container (smoke-test the
-   `--device=src:dst` symlink behavior; if it doesn't preserve the
-   symlink name, fall back to entrypoint `ln -sf` or patch
-   `xs_sdk_obj.h:22` to accept a port parameter).
-5. **Connection verification** — power on the arm. Launch
-   `interbotix_xsarm_control` for the px100 model inside the
-   controller container. Confirm `/px100/joint_states` publishes at
-   100 Hz (read from outside the container via a transient
-   `ros2 topic echo` container on the same network). Verify the arm
-   responds to a single command to go to its starting (sleep) pose.
+   Then add `--device=/dev/ttyDXL:/dev/ttyDXL` to the robot service
+   in `compose.yaml`. Confirm `/dev/ttyDXL` appears inside the
+   container (smoke-test the `--device=src:dst` symlink behavior; if
+   it doesn't preserve the symlink name, fall back to entrypoint
+   `ln -sf` or patch `xs_sdk_obj.h:22` to accept a port parameter).
+   The topology, federation, and rviz subscriber are unchanged from
+   Phase 4 — only the publisher changes.
+6. **Connection verification with real arm** — power on the arm.
+   Launch `interbotix_xsarm_control` for the px100 model in the
+   robot container. Confirm `/px100/joint_states` publishes at 100 Hz
+   (read via `docker compose exec robot ros2 topic hz`). Verify the
+   arm responds to a single command to go to its starting (sleep)
+   pose. Point rviz2 at the `interbotix_xsarm_descriptions` URDF and
+   verify the px100 model renders and reflects live joint states.
    Tag images.
-6. **rviz container + display verification** — launch the rviz
-   container with `--device=/dev/dri/renderD128`, X11/Wayland socket
-   bind-mounts, `--user $(id -u):$(id -g)`, and the same
-   `RMW_IMPLEMENTATION` / Zenoh endpoint override as the controller.
-   Verify rviz2 renders the URDF and reflects live joint states.
 7. **Pedagogical motion exercise** — adapt Lab 3 Code Example 2 from
    the Babaiasl *Modern Robotics* course (Saint Louis University) —
    `set_single_joint_position`, `set_ee_cartesian_trajectory`,
@@ -166,10 +250,14 @@ from Lyrical onward.**
    caveat**: the Babaiasl course is licensed for non-commercial use
    only (`NOASSERTION`); patterns may be referenced but no code is
    bundled into shipped product.
-8. **(Optional) Hello-world Flutter client** — implement a minimal
-   Flutter app that subscribes to `/px100/joint_states` via Zenoh.
-   Requires deciding the binding path first (`zenoh-pico` + Dart
-   FFI, community Dart binding, or REST/WebSocket bridge). Goal:
+8. **(Optional) Flutter client over LAN** — Flutter app on a mobile
+   device (Pixel 9a or similar) subscribes to `/px100/joint_states`
+   via `package:zenoh` in client mode, connecting over WiFi to
+   `tcp/<host-LAN-ip>:7447`. The robot-side router port is already
+   published in Phase 4's compose; what's new in this phase is the
+   router-side override to advertise a LAN-reachable locator (rather
+   than the bridge IP) via gossip. Pattern is proven in the
+   `zenoh-counter-flutter` template repo's Android branch. Goal:
    prove the data path end-to-end; not full Bluecorn integration.
    After Phase 8 the Docker-Lyrical runbook is considered complete.
 
@@ -209,22 +297,39 @@ from Lyrical onward.**
   `99-interbotix-udev.rules` must be installed in
   `/etc/udev/rules.d/` on the host. The container does not (and
   cannot) process udev events.
-- **`zenoh-dart` does not exist.** The Flutter client path is a
-  research-required follow-up, not a turnkey integration.
-- **rviz2 on Wayland needs XWayland** even in 2026; bind-mount
-  `/tmp/.X11-unix` regardless of host session type.
+- **The Flutter client binding is `package:zenoh`** from
+  https://github.com/hugo-bluecorn/zenoh_dart (community Dart FFI
+  binding over zenoh-c, maintained by this project's author). Not
+  in the `eclipse-zenoh` org. Proven in production by the
+  `zenoh-counter-flutter` template at
+  https://github.com/hugo-bluecorn/zenoh-counter-flutter.
+- **rviz2 requires XWayland, not native Wayland.** Three independent
+  blockers (main.cpp xcb override, rviz_rendering GLX calls, OGRE
+  1.12.10 lacking Wayland support) prevent native Wayland rendering.
+  On Resolute, XWayland is in `main`, installed by default, and
+  auto-started by the compositor. Containers bind-mount
+  `/tmp/.X11-unix` and use `DISPLAY=$DISPLAY` + `QT_QPA_PLATFORM=xcb`
+  to reach the XWayland server. `xhost +local:docker` on the host
+  grants access. No standalone Xorg session is needed or available.
 - **Multicast Zenoh discovery is disabled by default** in
   `rmw_zenoh_cpp`. Containers need explicit
   `connect.endpoints` overrides — no "it just works on the same
   Docker bridge" without configuration.
-- **rmw_zenoh's default session mode is `peer`**, which advertises a
-  loopback-only listen-locator. Cross-container peer-to-peer fails
-  silently — the listener can discover the talker (via the router's
-  gossip) but can't connect to its loopback address. Verified
-  empirically 2026-05-23; see `research/docker-architecture.md`
-  "Empirical verification" section. Fix: every non-router container
-  sets `mode="client"` via `ZENOH_CONFIG_OVERRIDE`. The router
-  container must NOT receive this env var.
+- **rmw_zenoh defaults assume one router + its peers share one
+  network namespace.** Default session config has
+  `listen/endpoints: ["tcp/localhost:0"]` and
+  `connect/endpoints: ["tcp/localhost:7447"]` — both loopback. This
+  is deliberate (per `rmw_zenoh/README.md` § "Configuration") and
+  makes peer-to-peer work over loopback after gossip-based discovery
+  through the local router. **Cross-netns ROS 2 setups (Docker
+  containers in separate netns, multiple hosts) need one router per
+  netns** plus federation between routers — NOT a single shared
+  router with peers across netns. The Phase 3 prototype's empirical
+  failure (peers in separate containers couldn't reach each other's
+  advertised loopback addresses) was diagnosed as this constraint;
+  Phase 4 adopts the rmw_zenoh-canonical fix (router per container
+  + federation override on one router) and the project's topology
+  follows that pattern from then on.
 
 ## Working conventions
 

@@ -1,34 +1,19 @@
-# compose.yaml — Docker Compose v2 spec for the px100 Docker-Lyrical
-# project. Encodes the topology verified end-to-end on 2026-05-23:
-# rmw_zenohd router + ROS 2 nodes in client mode on a user-defined
-# Docker bridge network.
+# compose.yaml — Phase 4 topology proof.
+#
+# Two-container, two-router, federated topology. Robot uses ros-base
+# (headless); dev uses desktop-full (rviz + GUI). Both built from
+# the same parameterized Dockerfile with different BASE_IMAGE and
+# EXTRA_PKGS args. See runbook/04-topology-proof-urdf-tutorial.md.
 #
 # Usage:
-#   docker compose up router               # router only (production-style)
-#   docker compose --profile verify up      # router + demo talker (smoke test)
-#   docker compose --profile verify down    # tear down
+#   docker compose build        # build both images
+#   xhost +local:docker         # allow containers to reach XWayland
+#   docker compose up           # brings up both containers
+#   docker compose down         # tears down
 #
-# Ad-hoc subscription (one-shot listener, runs with --rm):
-#   docker compose run --rm listener ros2 topic echo --once /chatter
-#   docker compose run --rm listener ros2 topic list
-#   docker compose run --rm listener bash
-#
-# Build the base image (if not already built):
-#   docker buildx build -t px100-base:dev --load docker/
-#   # or, via compose itself:
-#   docker compose build
-#
-# Notes on architecture:
-#   - rmw_zenoh defaults to mode="peer", which advertises a loopback-
-#     only listen-locator unreachable across Docker network namespaces.
-#     The clients here override to mode="client" so all comms relay
-#     through the central router. The router itself runs without
-#     ZENOH_CONFIG_OVERRIDE — overrides apply to whichever Zenoh
-#     config the process loads (session OR router); setting client
-#     mode on the router would break it.
-#   - Multicast scouting is disabled by default in rmw_zenoh; this
-#     topology relies on TCP unicast for discovery via the router.
-#     No --network=host needed; Docker's bridge networking is enough.
+# Ad-hoc topic inspection from outside both containers:
+#   docker compose exec robot bash -c "source /opt/ros/lyrical/setup.bash && ros2 topic list"
+#   docker compose exec dev   bash -c "source /opt/ros/lyrical/setup.bash && ros2 topic echo /joint_states --once"
 
 name: px100
 
@@ -36,51 +21,63 @@ networks:
   default:
     name: px100-net
 
-# YAML anchor for the shared base config — image, build context, and
-# the user-defined network. Service definitions splice this in via
-# `<<: *px100-base`.
-x-px100-base: &px100-base
-  image: px100-base:dev
-  build:
-    context: ./docker
-    dockerfile: Dockerfile
+x-build-common: &build-common
+  context: ./docker
+  dockerfile: Dockerfile
 
-# YAML anchor for the client-mode Zenoh override env block. Spliced
-# into every non-router service.
-x-zenoh-client-env: &zenoh-client-env
-  RMW_IMPLEMENTATION: rmw_zenoh_cpp
-  ZENOH_CONFIG_OVERRIDE: 'mode="client";connect/endpoints=["tcp/router:7447"]'
+# XWayland display env for the dev container. On Resolute, DISPLAY
+# points to XWayland (auto-started by the Wayland compositor), not a
+# standalone Xorg. rviz2 forces xcb automatically; QT_QPA_PLATFORM
+# is set here for explicitness.
+x-xwayland: &xwayland
+  DISPLAY: ${DISPLAY:-:0}
+  QT_QPA_PLATFORM: xcb
 
 services:
-  # The central Zenoh router. Always present in the topology.
-  router:
-    <<: *px100-base
-    container_name: router
-    command: ros2 run rmw_zenoh_cpp rmw_zenohd
-    restart: unless-stopped
+  robot:
+    image: px100-robot:dev
+    build:
+      <<: *build-common
+      args:
+        BASE_IMAGE: ros:lyrical-ros-base-resolute
+        EXTRA_PKGS: ros-lyrical-urdf-tutorial
+    container_name: robot
+    init: true
+    ports:
+      - "7447:7447"
+    command:
+      - bash
+      - -c
+      - |
+        source /opt/ros/lyrical/setup.bash
+        URDF=/opt/ros/lyrical/share/urdf_tutorial/urdf/06-flexible.urdf
+        ros2 run robot_state_publisher robot_state_publisher \
+          --ros-args -p robot_description:="$$(cat $$URDF)"
 
-  # Demo talker, behind the `verify` profile. Not part of the
-  # production topology; only spun up when explicitly running the
-  # smoke test (e.g., `docker compose --profile verify up`).
-  talker:
-    <<: *px100-base
-    container_name: talker
-    profiles: ["verify"]
-    environment:
-      <<: *zenoh-client-env
-    command: ros2 run demo_nodes_cpp talker
+  dev:
+    image: px100-dev:dev
+    build:
+      <<: *build-common
+      args:
+        BASE_IMAGE: osrf/ros:lyrical-desktop-full-resolute
+        EXTRA_PKGS: "ros-lyrical-urdf-tutorial ros-lyrical-joint-state-publisher-gui"
+    container_name: dev
+    init: true
     depends_on:
-      - router
-    restart: "no"
-
-  # Template for one-shot ad-hoc clients (listener, topic echo, etc.).
-  # Runs only when explicitly invoked via `docker compose run --rm
-  # listener <command>` — never started by `docker compose up`.
-  listener:
-    <<: *px100-base
-    profiles: ["adhoc"]
+      - robot
     environment:
-      <<: *zenoh-client-env
-    depends_on:
-      - router
-    # No `command:` — supplied at `docker compose run` time.
+      <<: *xwayland
+      ZENOH_CONFIG_OVERRIDE: 'connect/endpoints=["tcp/robot:7447"]'
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw  # XWayland socket
+    command:
+      - bash
+      - -c
+      - |
+        source /opt/ros/lyrical/setup.bash
+        ros2 run joint_state_publisher_gui joint_state_publisher_gui &
+        GUI_PID=$$!
+        trap "kill $$GUI_PID 2>/dev/null || true" EXIT
+        rviz2
