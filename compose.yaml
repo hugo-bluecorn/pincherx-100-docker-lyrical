@@ -1,19 +1,14 @@
-# compose.yaml — Phase 4 topology proof.
+# compose.yaml — Phase 5: controller + USB pass-through.
 #
-# Two-container, two-router, federated topology. Robot uses ros-base
-# (headless); dev uses desktop-full (rviz + GUI). Both built from
-# the same parameterized Dockerfile with different BASE_IMAGE and
-# EXTRA_PKGS args. See runbook/04-topology-proof-urdf-tutorial.md.
+# Two-container, two-router, federated topology. Robot runs the
+# Interbotix xs_sdk controller with USB device pass-through; dev
+# runs rviz2 for visualization (deferred to Phase 6).
 #
 # Usage:
 #   docker compose build        # build both images
 #   xhost +local:docker         # allow containers to reach XWayland
 #   docker compose up           # brings up both containers
 #   docker compose down         # tears down
-#
-# Ad-hoc topic inspection from outside both containers:
-#   docker compose exec robot bash -c "source /opt/ros/lyrical/setup.bash && ros2 topic list"
-#   docker compose exec dev   bash -c "source /opt/ros/lyrical/setup.bash && ros2 topic echo /joint_states --once"
 
 name: px100
 
@@ -25,10 +20,6 @@ x-build-common: &build-common
   context: ./docker
   dockerfile: Dockerfile
 
-# XWayland display env for the dev container. On Resolute, DISPLAY
-# points to XWayland (auto-started by the Wayland compositor), not a
-# standalone Xorg. rviz2 forces xcb automatically; QT_QPA_PLATFORM
-# is set here for explicitness.
 x-xwayland: &xwayland
   DISPLAY: ${DISPLAY:-:0}
   QT_QPA_PLATFORM: xcb
@@ -40,19 +31,20 @@ services:
       <<: *build-common
       args:
         BASE_IMAGE: ros:lyrical-ros-base-resolute
-        EXTRA_PKGS: ros-lyrical-urdf-tutorial
+        BUILD_INTERBOTIX: "true"
     container_name: robot
     init: true
     ports:
       - "7447:7447"
+    devices:
+      - /dev/ttyDXL:/dev/ttyDXL
     command:
       - bash
       - -c
       - |
-        source /opt/ros/lyrical/setup.bash
-        URDF=/opt/ros/lyrical/share/urdf_tutorial/urdf/06-flexible.urdf
-        ros2 run robot_state_publisher robot_state_publisher \
-          --ros-args -p robot_description:="$$(cat $$URDF)"
+        ros2 launch interbotix_xsarm_control xsarm_control.launch.py \
+          robot_model:=px100 \
+          use_rviz:=false
 
   dev:
     image: px100-dev:dev
@@ -60,7 +52,7 @@ services:
       <<: *build-common
       args:
         BASE_IMAGE: osrf/ros:lyrical-desktop-full-resolute
-        EXTRA_PKGS: "ros-lyrical-urdf-tutorial ros-lyrical-joint-state-publisher-gui"
+        EXTRA_PKGS: ros-lyrical-joint-state-publisher-gui libxcb-cursor0
     container_name: dev
     init: true
     depends_on:
@@ -71,13 +63,9 @@ services:
     devices:
       - /dev/dri:/dev/dri
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw  # XWayland socket
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
     command:
       - bash
       - -c
       - |
-        source /opt/ros/lyrical/setup.bash
-        ros2 run joint_state_publisher_gui joint_state_publisher_gui &
-        GUI_PID=$$!
-        trap "kill $$GUI_PID 2>/dev/null || true" EXIT
         rviz2
