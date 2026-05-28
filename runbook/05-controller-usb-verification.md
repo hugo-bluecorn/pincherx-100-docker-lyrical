@@ -132,16 +132,24 @@ Unplug the arm PSU. Unplug the U2D2 if no further work this session.
 
 ## Watch-outs
 
-- **If xs_sdk fails its first ping attempts ("no status packet" for
-  all 5 motors), the motors may be in a cold-start or residual-state
-  condition** rather than a code bug. Verified workaround on
-  2026-05-28: probe each motor with raw pyserial + PING, or call
-  `dxl_wb.torque(id, false)` on each (which writes the
-  TORQUE_ENABLE register), then re-run `docker compose up robot`.
-  Simplest alternative: power-cycle the arm PSU and wait 30 seconds
-  before re-launching. See project memory
-  `project_lyrical_docker_cold_start_quirk` for the open hypothesis
-  and the planned cold-start reproduction test.
+- **Cold-start failure handled by the image entrypoint.** Without
+  the warmup, xs_sdk would report 0/5 motors with "no status packet"
+  on every ping attempt and FATAL-exit on a freshly-plugged U2D2
+  (verified reproducible 2026-05-28). The bus, motors, and protocol
+  all work in cold state — raw Protocol-2.0 PINGs return proper
+  responses — but xs_sdk's `DynamixelWorkbench::ping(id, log)` call
+  pattern (Protocol 1.0 probe before Protocol 2.0) trips an
+  unreliable U2D2 RS-485 direction-switch on the first packets after
+  enumeration. `docker/entrypoint.sh` now sends one raw P2.0 PING per
+  motor (1-5) via the apt-installed DynamixelSDK Python wrapper
+  before starting xs_sdk, which warms the U2D2 enough for xs_sdk's
+  first attempt to succeed. See project memory
+  `project_lyrical_docker_cold_start_quirk` for the full reproduction
+  protocol. **If you ever see the 0/5 failure despite the entrypoint
+  warmup** (e.g., after a hardware change or new motor firmware),
+  the manual fallback is to run the warmup script (in the same
+  memory) by hand against a still-running container, then
+  `docker compose down` + `up robot`.
 - **Dev container needs `xhost +local:docker` on the host** before
   `docker compose up`, otherwise rviz2 fails with "Authorization
   required, but no authorization protocol specified" and

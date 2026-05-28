@@ -32,6 +32,25 @@ if [ -e /dev/ttyUSB0 ] && [ ! -e /dev/ttyDXL ]; then
   ln -sf /dev/ttyUSB0 /dev/ttyDXL
 fi
 
+# Cold-start warmup: send one raw Protocol-2.0 PING per motor (1-5)
+# via the apt-installed DynamixelSDK Python wrapper. Settles U2D2
+# RS-485 direction-switching on the first packets after FTDI
+# enumeration; without this, xs_sdk's first ping_motors() can fail
+# 0/5 on a freshly-plugged U2D2. No-op if /dev/ttyDXL is absent
+# (dev image, or arm not plugged in). Errors silently ignored.
+# See project memory project_lyrical_docker_cold_start_quirk.
+if [ -e /dev/ttyDXL ]; then
+  python3 -c '
+from dynamixel_sdk import PortHandler, PacketHandler
+p = PortHandler("/dev/ttyDXL")
+ph = PacketHandler(2.0)
+if p.openPort() and p.setBaudRate(1000000):
+    for mid in (1, 2, 3, 4, 5):
+        ph.ping(p, mid)
+    p.closePort()
+' 2>/dev/null || true
+fi
+
 # Start the router, inheriting ZENOH_CONFIG_OVERRIDE if set.
 ros2 run rmw_zenoh_cpp rmw_zenohd &
 ROUTER_PID=$!
