@@ -218,9 +218,9 @@ from Lyrical onward.**
    Robot-side router publishes port 7447 on the host LAN for the
    future Phase 8 Flutter client. Runbook:
    `runbook/04-topology-proof-urdf-tutorial.md`.
-5. **Controller container + USB pass-through** — swap the
-   `urdf_tutorial` publisher in the robot container for `xs_sdk` /
-   the patched Trossen workspace. Install Trossen's
+5. **Controller container + USB pass-through + arm verification** —
+   swap the `urdf_tutorial` publisher in the robot container for
+   `xs_sdk` / the patched Trossen workspace. Install Trossen's
    `99-interbotix-udev.rules` at `/etc/udev/rules.d/` on the host
    (relocated here from Phase 1 because it requires the U2D2 to be
    plugged in for verification). Reload udev rules
@@ -228,29 +228,32 @@ from Lyrical onward.**
    plug in the U2D2, confirm `/dev/ttyDXL` symlink appears on the host.
    Then add `--device=/dev/ttyDXL:/dev/ttyDXL` to the robot service
    in `compose.yaml`. Confirm `/dev/ttyDXL` appears inside the
-   container (smoke-test the `--device=src:dst` symlink behavior; if
-   it doesn't preserve the symlink name, fall back to entrypoint
-   `ln -sf` or patch `xs_sdk_obj.h:22` to accept a port parameter).
-   The topology, federation, and rviz subscriber are unchanged from
-   Phase 4 — only the publisher changes.
-6. **Connection verification with real arm** — power on the arm.
-   Launch `interbotix_xsarm_control` for the px100 model in the
-   robot container. Confirm `/px100/joint_states` publishes at 100 Hz
-   (read via `docker compose exec robot ros2 topic hz`). Verify the
-   arm responds to a single command to go to its starting (sleep)
-   pose. Point rviz2 at the `interbotix_xsarm_descriptions` URDF and
-   verify the px100 model renders and reflects live joint states.
-   Tag images.
-7. **Pedagogical motion exercise** — adapt Lab 3 Code Example 2 from
-   the Babaiasl *Modern Robotics* course (Saint Louis University) —
-   `set_single_joint_position`, `set_ee_cartesian_trajectory`,
-   `gripper.set_pressure` in a mock pick-and-place sequence. Confirms
-   the arm executes a multi-step Cartesian-space sequence and that
-   the containerized rviz holds up under live motion. **License
-   caveat**: the Babaiasl course is licensed for non-commercial use
-   only (`NOASSERTION`); patterns may be referenced but no code is
-   bundled into shipped product.
-8. **(Optional) Flutter client over LAN** — Flutter app on a mobile
+   container. Power on the arm. `docker compose up robot` launches
+   `xsarm_control.launch.py` for the px100. Confirm `/px100/joint_states`
+   publishes at ~100 Hz, all 5 Dynamixels are detected, and a
+   sleep → home → sleep round-trip via a connect-check script exits
+   cleanly. The topology, federation, and rviz subscriber are
+   unchanged from Phase 4 — only the publisher changes. Tag images.
+6. **Pedagogical motion exercise** — walk a student sequentially through
+   the robot-driving exercises in Labs 3-9 of Babaiasl's *Modern
+   Robotics* course wiki (Saint Louis University): joint position
+   control, Cartesian-space pick-and-place, DOF demonstration,
+   rotation-matrix and PoE forward-kinematics verification against
+   the physical arm. Pedagogical, not a verification gate — Phase 5
+   already establishes that the motion plumbing works. Phase 6
+   produces a single walkthrough document; per-lab scripts live in
+   `~/px100-lab-scripts/` on the host and are copied into the robot
+   container via `docker cp` per run. **License caveat**: the
+   Babaiasl course is licensed for non-commercial use only
+   (`NOASSERTION`); the walkthrough adapts the high-level
+   `InterbotixManipulatorXS` API-usage pattern (itself documented
+   Trossen public API), not the course's authored prose, math, or
+   fill-in-the-blank skeletons. Project 1 (velocity-mode Jacobian
+   dance) and Project 2 Part 1 (geometric + numerical IK) are listed
+   as post-runbook next steps in the walkthrough; Project 2 Part 2
+   (vision-aided IK) is out of scope until a RealSense pass-through
+   phase is added.
+7. **(Optional) Flutter client over LAN** — Flutter app on a mobile
    device (Pixel 9a or similar) subscribes to `/px100/joint_states`
    via `package:zenoh` in client mode, connecting over WiFi to
    `tcp/<host-LAN-ip>:7447`. The robot-side router port is already
@@ -259,7 +262,7 @@ from Lyrical onward.**
    than the bridge IP) via gossip. Pattern is proven in the
    `zenoh-counter-flutter` template repo's Android branch. Goal:
    prove the data path end-to-end; not full Bluecorn integration.
-   After Phase 8 the Docker-Lyrical runbook is considered complete.
+   After Phase 7 the Docker-Lyrical runbook is considered complete.
 
 ## Out of scope
 

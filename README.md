@@ -21,7 +21,7 @@ now three sibling repos covering this territory:
 |---|---|---|
 | [pincherx-100-runbook](https://github.com/hugo-bluecorn/pincherx-100-runbook) | ROS 2 Humble, QEMU/KVM guest, Kubuntu 22.04 | Phase 5 done; Phase 6+ paused |
 | [pincherx-100-runbook-lyrical-luth](https://github.com/hugo-bluecorn/pincherx-100-runbook-lyrical-luth) | ROS 2 Lyrical Luth, QEMU/KVM guest, Kubuntu 26.04 | Phase 0 reset; dormant |
-| **this repo** | ROS 2 Lyrical Luth, **Docker on bare metal**, Ubuntu 26.04 | Phase 0 |
+| **this repo** | ROS 2 Lyrical Luth, **Docker on bare metal**, Ubuntu 26.04 | Phase 5 done; Phase 6 drafted |
 
 This project exists specifically to **avoid VM-based isolation** and the
 virtio-gpu workqueue stalls that complicated the Humble runbook's
@@ -55,12 +55,30 @@ Full per-component justification: [`CLAUDE.md`](CLAUDE.md) and
 
 ## Status
 
-**Phase 0** — repo scaffolded; architectural research complete and
-cited; foundational `CLAUDE.md` drafted; prototype `docker/Dockerfile`
-and `compose.yaml` landed and empirically verified end-to-end (router
-+ talker + listener communicating across Docker network namespaces via
-Zenoh in client mode). **Hardware work (USB, GPU, robot) has not been
-executed yet** — Phase 1 onwards.
+**Phase 5 — controller container + USB pass-through + arm verification**
+is the latest committed phase. End-to-end hardware-verified on
+2026-05-28: all 5 Dynamixels detected on first ping attempt,
+`/px100/joint_states` publishes at ~100 Hz, and a sleep → home →
+sleep round-trip via a connect-check script exits 0. Cold-start
+warmup baked into the image entrypoint.
+
+**Phase 6 — pedagogical motion exercise (Babaiasl Labs 3-9 walkthrough)**
+is drafted in `runbook/06-pedagogical-motion-exercise.md` but not yet
+hardware-exercised. It commits after at least Lab 3 is run on the arm.
+
+Earlier phases:
+
+- **Phase 0** — repo scaffolded; architectural research complete and
+  cited.
+- **Phase 1** — host preparation (Docker engine, BuildKit, Compose v2).
+- **Phase 2** — image build (parameterized Dockerfile, `px100-robot:dev`
+  + `px100-dev:dev`).
+- **Phase 3** — single-router prototype (superseded by Phase 4).
+- **Phase 4** — two-container, two-router federated Zenoh topology
+  proven with `urdf_tutorial`.
+- **Phase 5** — real-arm bring-up (above).
+- **Phase 6** — drafted (above).
+- **Phase 7** — optional Flutter client over LAN (not started).
 
 The Humble parent at
 https://github.com/hugo-bluecorn/pincherx-100-runbook is at Phase 5 done
@@ -79,8 +97,8 @@ pincherx-100-docker-lyrical/
 │   └── Dockerfile           single base image (osrf/ros:lyrical-desktop-full-resolute + rmw_zenoh)
 ├── research/
 │   └── docker-architecture.md   primary-source research justifying every decision
-├── runbook/                 phase-by-phase setup instructions (TBD — Phase 1 next)
-├── installers/              patched Trossen installer fork (populated in Phase 2)
+├── runbook/                 phase-by-phase setup instructions (Phases 1-5 done; Phase 6 drafted)
+├── installers/              patched Trossen installer fork (TBD; install currently inlined in Dockerfile)
 └── scripts/                 utility scripts (TBD)
 ```
 
