@@ -44,6 +44,13 @@ graph, avoiding Python**. Read in order:
    choice (B-PoE vs B-KDL), and the Flutter interface (a JSON Zenoh
    queryable — because raw Zenoh clients can't practically call ROS
    services and Dart has no CDR codec).
+5. **[poc-flutter-zenoh-control.md](poc-flutter-zenoh-control.md)** — *first
+   concrete POC.* A simple Flutter + `zenoh-dart` app (no rosbridge/foxglove,
+   no gateway): two buttons for home/sleep poses + per-joint jog sliders.
+   Direct joint-space commands (`JointGroupCommand` / `JointSingleCommand`)
+   over the ROS wire — no IK, no singularities. Verified message shapes,
+   joint limits, the mandatory Zenoh attachment, and the Dart recipe +
+   verification ladder.
 
 ## Conventions
 
