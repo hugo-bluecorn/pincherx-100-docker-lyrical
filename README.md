@@ -55,6 +55,11 @@ Full per-component justification: [`CLAUDE.md`](CLAUDE.md) and
 
 ## Status
 
+**Just want a running robot to develop a client against** (no image
+build)? See [`runbook/00-quickstart-prebuilt.md`](runbook/00-quickstart-prebuilt.md)
+— pull the prebuilt `px100-robot` image from GHCR and run it, with a
+hardware-free `--profile sim` mode.
+
 **Phase 5 — controller container + USB pass-through + arm verification**
 is the latest committed phase. End-to-end hardware-verified on
 2026-05-28: all 5 Dynamixels detected on first ping attempt,
@@ -92,7 +97,9 @@ pincherx-100-docker-lyrical/
 ├── README.md                you are here
 ├── CLAUDE.md                project rationale, architecture, constraints
 ├── LICENSE                  Apache 2.0
-├── compose.yaml             Docker Compose topology (router + clients)
+├── compose.yaml             Docker Compose topology (build + run, router + clients)
+├── compose.consumer.yaml    run a PREBUILT px100-robot image from GHCR (sim/hw profiles)
+├── .github/workflows/       CI — publish-robot-image.yml builds + pushes px100-robot to GHCR
 ├── docker/
 │   └── Dockerfile           single base image (osrf/ros:lyrical-desktop-full-resolute + rmw_zenoh)
 ├── research/                primary-source research + design analysis — see research/README.md (index)

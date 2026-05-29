@@ -1,0 +1,56 @@
+# compose.consumer.yaml — run a PREBUILT px100-robot image from GHCR.
+#
+# Unlike compose.yaml, this does NOT build anything. It pulls the image
+# published by .github/workflows/publish-robot-image.yml and runs it.
+# Use it to spin up a robot to develop a client (e.g. the Flutter app)
+# against, without rebuilding the workspace.
+#
+# Pick ONE profile:
+#   Simulator (no hardware needed):
+#     docker compose -f compose.consumer.yaml --profile sim up
+#   Real arm (needs the U2D2 + /dev/ttyDXL on the host; see runbook 05):
+#     docker compose -f compose.consumer.yaml --profile hw  up
+#
+# Pin a specific image tag with the PX100_TAG env var (default: lyrical):
+#   PX100_TAG=phase5 docker compose -f compose.consumer.yaml --profile sim up
+#
+# Either way the robot's Zenoh router is published on host port 7447;
+# a Flutter/zenoh-dart client connects to tcp/<this-host-LAN-ip>:7447.
+
+name: px100
+
+networks:
+  default:
+    name: px100-net
+
+x-robot-common: &robot-common
+  image: ghcr.io/hugo-bluecorn/px100-robot:${PX100_TAG:-lyrical}
+  init: true
+  ports:
+    - "7447:7447"
+
+services:
+  # Hardware-free: runs the xs_sdk_sim simulator. Publishes joint_states
+  # and accepts commands with no U2D2 and no arm.
+  robot-sim:
+    <<: *robot-common
+    profiles: ["sim"]
+    command:
+      - bash
+      - -c
+      - |
+        ros2 launch interbotix_xsarm_control xsarm_control.launch.py \
+          robot_model:=px100 use_rviz:=false use_sim:=true
+
+  # Real arm: passes the U2D2 device through and runs the real xs_sdk.
+  robot-hw:
+    <<: *robot-common
+    profiles: ["hw"]
+    devices:
+      - /dev/ttyDXL:/dev/ttyDXL
+    command:
+      - bash
+      - -c
+      - |
+        ros2 launch interbotix_xsarm_control xsarm_control.launch.py \
+          robot_model:=px100 use_rviz:=false use_sim:=false
