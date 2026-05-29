@@ -96,7 +96,8 @@ pincherx-100-docker-lyrical/
 ├── docker/
 │   └── Dockerfile           single base image (osrf/ros:lyrical-desktop-full-resolute + rmw_zenoh)
 ├── research/
-│   └── docker-architecture.md   primary-source research justifying every decision
+│   ├── docker-architecture.md   primary-source research justifying every decision
+│   └── interbotix-python-cpp-boundary.md   Python/C++ boundary analysis for direct (Python-free) Flutter access
 ├── runbook/                 phase-by-phase setup instructions (Phases 1-5 done; Phase 6 drafted)
 ├── installers/              patched Trossen installer fork (TBD; install currently inlined in Dockerfile)
 └── scripts/                 utility scripts (TBD)

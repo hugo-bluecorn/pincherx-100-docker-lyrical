@@ -389,3 +389,5 @@ from Lyrical onward.**
   https://docs.mesa3d.org/envvars.html
 - Architectural research synthesis for this project:
   `research/docker-architecture.md` (in this repo)
+- Interbotix Python/C++ boundary analysis (for Python-free Flutter access):
+  `research/interbotix-python-cpp-boundary.md` (in this repo)
