@@ -97,7 +97,8 @@ pincherx-100-docker-lyrical/
 │   └── Dockerfile           single base image (osrf/ros:lyrical-desktop-full-resolute + rmw_zenoh)
 ├── research/
 │   ├── docker-architecture.md   primary-source research justifying every decision
-│   └── interbotix-python-cpp-boundary.md   Python/C++ boundary analysis for direct (Python-free) Flutter access
+│   ├── interbotix-python-cpp-boundary.md   Python/C++ boundary analysis for direct (Python-free) Flutter access
+│   └── cpp-kinematics-alternatives.md   C/C++ (and Dart) alternatives to Python modern_robotics for IK/FK
 ├── runbook/                 phase-by-phase setup instructions (Phases 1-5 done; Phase 6 drafted)
 ├── installers/              patched Trossen installer fork (TBD; install currently inlined in Dockerfile)
 └── scripts/                 utility scripts (TBD)
