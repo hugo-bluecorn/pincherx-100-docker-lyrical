@@ -95,11 +95,7 @@ pincherx-100-docker-lyrical/
 ├── compose.yaml             Docker Compose topology (router + clients)
 ├── docker/
 │   └── Dockerfile           single base image (osrf/ros:lyrical-desktop-full-resolute + rmw_zenoh)
-├── research/
-│   ├── docker-architecture.md   primary-source research justifying every decision
-│   ├── interbotix-python-cpp-boundary.md   Python/C++ boundary analysis for direct (Python-free) Flutter access
-│   ├── cpp-kinematics-alternatives.md   C/C++ (and Dart) alternatives to Python modern_robotics for IK/FK
-│   └── path-b-cartesian-gateway.md   C++ Cartesian gateway node design (Flutter-over-Zenoh, no Python)
+├── research/                primary-source research + design analysis — see research/README.md (index)
 ├── runbook/                 phase-by-phase setup instructions (Phases 1-5 done; Phase 6 drafted)
 ├── installers/              patched Trossen installer fork (TBD; install currently inlined in Dockerfile)
 └── scripts/                 utility scripts (TBD)
