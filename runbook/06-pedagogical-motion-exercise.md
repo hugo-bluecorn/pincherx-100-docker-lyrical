@@ -11,8 +11,8 @@ the course teaches.
 This document is designed to stand on its own: a student who has
 finished Phase 5 should be able to land here, follow the order
 below, and get an exposure to the API surface that is substantive
-enough to be useful for [Phase 7](07-flutter-client-over-lan.md)
-and for the post-runbook Bluecorn work. The walkthrough does **not**
+enough to be useful for Phase 7 (Flutter client over LAN — chapter
+not yet authored) and for the post-runbook Bluecorn work. The walkthrough does **not**
 ask the student to commit any per-lab scripts or to tag a
 verification image — Phase 5's tagged controller image remains the
 working state through Phase 7.
@@ -835,11 +835,15 @@ more px100 practice.
   pass-through is deferred per `CLAUDE.md`'s phase plan. Revisit
   when (or if) a perception phase is added.
 
-After Phase 6, the runbook continues with
-[Phase 7 — Flutter client over LAN](07-flutter-client-over-lan.md),
-which builds the data path that lets a Flutter client on a phone
-subscribe to `/px100/joint_states` (and other topics) via Zenoh.
+After Phase 6, the runbook continues with Phase 7 — Flutter client
+over LAN (chapter not yet authored), which would prove the data path
+that lets a Flutter client on a phone reach the robot via Zenoh.
 After Phase 7 the Docker-Lyrical runbook is considered complete.
+*(2026-06-03 note: that data path already shipped in the sibling
+[pincherx-100-flutter-poc](https://github.com/hugo-bluecorn/pincherx-100-flutter-poc)
+repo — its Flutter app commands the real arm from an Android phone
+over WiFi via the `px100_zenoh_gateway` JSON path; state
+subscription over Zenoh is that project's M3.)*
 
 ---
 

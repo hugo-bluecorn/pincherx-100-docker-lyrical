@@ -34,15 +34,17 @@ After this phase:
   the model live as sliders move.
 - The robot-side router publishes port `7447` on the host LAN
   interface in preparation for the future Flutter-from-phone case
-  (Phase 8+); the dev-side router stays internal.
+  (Phase 7, in the renumbered plan); the dev-side router stays
+  internal.
 
 ## Scope explicitly excluded
 
-- `xs_sdk` / Trossen workspace / patched installer — deferred to
-  Phase 5 ("controller container + USB pass-through"), which will
-  swap the `urdf_tutorial` publisher for the real arm.
+- `xs_sdk` / the Interbotix workspace (built from the `hugo-bluecorn`
+  lyrical-branch forks; no patched installer was ever needed) —
+  deferred to Phase 5 ("controller container + USB pass-through"),
+  which swaps the `urdf_tutorial` publisher for the real arm.
 - U2D2 USB pass-through — Phase 5.
-- Flutter client connecting to robot-router over WiFi — Phase 8.
+- Flutter client connecting to robot-router over WiFi — Phase 7.
 - `interbotix_xsarm_descriptions` URDF — could be a Phase 4a slice
   after this one (uses real px100 URDF without xs_sdk), or rolled
   into Phase 5.
@@ -767,7 +769,7 @@ git push
   "unbound variable" errors when bash subshells run.
 - **The robot container's published port 7447 is unused this phase.**
   No external client connects in Phase 4. The port-publish is there
-  to make Phase 4's compose forward-compatible with Phase 8
+  to make Phase 4's compose forward-compatible with Phase 7
   (Flutter-from-phone). Removing it for Phase 4 is fine if you'd
   prefer to add it back later.
 - **`urdf_tutorial` comes from `ros2-testing` apt repo in the OSRF
@@ -784,24 +786,30 @@ git push
   (`--device` resolves symlinks to targets, so `/dev/ttyDXL` arrives
   as `/dev/ttyUSB0` inside the container; xs_sdk hardcodes the
   `/dev/ttyDXL` path).
-- Trossen workspace built from the patched installer fork — Phase 5.
+- The Interbotix workspace build (what became the
+  `BUILD_INTERBOTIX=true` forked-workspace build, not a patched
+  installer) — Phase 5.
 - Real arm motion via xs_sdk publishing `/px100/joint_states` —
   Phase 5.
 - LAN exposure of the Zenoh router to a non-Docker host (the
-  phone) — Phase 8. The port publishing on `robot:7447` is already
+  phone) — Phase 7. The port publishing on `robot:7447` is already
   in place; what's missing is the router-side override to advertise
   a LAN-reachable locator (rather than the bridge IP) via gossip.
-  Decide that override when Phase 8 begins, against the rmw_zenoh
-  README's "Connecting multiple hosts" example.
+  Decide that override when Phase 7 begins, against the rmw_zenoh
+  README's "Connecting multiple hosts" example. *(2026-06-03 note:
+  the sibling `pincherx-100-flutter-poc` repo has since proven the
+  phone case end-to-end — its app drove the real arm from a Pixel 9a
+  over WiFi against a host-published `7447`, without needing the
+  locator-advertisement override in its single-container setup.)*
 
 ### Alternative URDF source: the real px100
 
 An optional Phase 4a slice — use the `interbotix_xsarm_descriptions`
 URDF for the PincherX-100 instead of `urdf_tutorial`'s generic
-models. Requires the patched Trossen workspace to be built first
-(currently scheduled for Phase 5). Would visually validate that
-rviz2 renders the actual px100 URDF, separately from validating
-that xs_sdk drives it.
+models. Requires the Interbotix workspace to be built first
+(landed in Phase 5 via `BUILD_INTERBOTIX=true`). Would visually
+validate that rviz2 renders the actual px100 URDF, separately from
+validating that xs_sdk drives it.
 
 ### Project memories to refresh after this phase verifies
 

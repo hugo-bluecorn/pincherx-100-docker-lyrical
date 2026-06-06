@@ -152,13 +152,24 @@ move to the commanded values. In **hw**, the physical arm moves.
 
 ## How this fits the Flutter POC dev loop
 
-1. `--profile sim up` here → a robot on `tcp/<laptop-LAN-ip>:7447`, no arm.
-2. In `pincherx-100-flutter-poc`, point the app's `zenoh-dart` client at
+The sibling repo
+[`pincherx-100-flutter-poc`](https://github.com/hugo-bluecorn/pincherx-100-flutter-poc)
+consumes this image. Its app does **not** speak the ROS wire — it
+publishes plain JSON on the Zenoh key `px100/cmd/pose`, and a robot-side
+C++ node (`px100_zenoh_gateway`, in that repo's `ros-cpp/` workspace)
+translates JSON → `interbotix_xs_msgs` for `xs_sdk`. No message type
+hashes, no CDR, no attachment on the Dart side.
+
+1. A robot container from this image on `tcp/<laptop-LAN-ip>:7447` —
+   either this repo's `--profile sim` (bare robot, no gateway), or, for
+   the app's full loop, the sibling repo's composes
+   (`ros-docker/compose.sim-rviz.yaml` / `compose.hardware.yaml`), which
+   run the same image with the gateway overlaid from a bind-mounted
+   workspace.
+2. In `pincherx-100-flutter-poc`, point the app at
    `tcp/<laptop-LAN-ip>:7447` and develop against the sim.
-3. Capture the message type hashes once: `ros2 topic info -v
-   /px100/commands/joint_group` (same hash in sim and on hardware).
-4. When the wire path works in sim, switch to `--profile hw up` and
-   validate on the real arm.
+3. When the JSON path works in sim, switch to the hardware compose and
+   validate on the real arm (verified 2026-06-03, desktop + Android).
 
 ---
 

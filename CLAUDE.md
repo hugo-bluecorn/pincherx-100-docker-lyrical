@@ -141,7 +141,8 @@ from Lyrical onward.**
   `-DOGRE_USE_WAYLAND=TRUE`, but rviz has not adopted it (tracked in
   https://github.com/ros2/rviz/issues/847).
   Containers bind-mount `/tmp/.X11-unix` (the XWayland socket) and
-  `/dev/dri/renderD128` (Intel Iris Xe iGPU on this Dell Precision 3581).
+  pass `--device=/dev/dri` (whose `renderD128` node is the Intel Iris
+  Xe iGPU on this Dell Precision 3581).
   `QT_QPA_PLATFORM=xcb` is set in compose for explicitness, though
   rviz2 forces it automatically. `xhost +local:docker` grants container
   access to the XWayland server; re-run after each reboot.
@@ -165,16 +166,26 @@ from Lyrical onward.**
   TCP over WiFi to the host's published router endpoint
   (`tcp/<host-LAN-ip>:7447`). The phone-as-client + router-on-robot
   shape is exactly what `rmw_zenoh/README.md` § "Connecting to the
-  Zenoh router on another host" prescribes for remote nodes. Phase 8
-  wires this in for the PincherX-100; the bridge layer
+  Zenoh router on another host" prescribes for remote nodes. Phase 7
+  covers this for the PincherX-100; the bridge layer
   (`zenoh-bridge-ros2dds`) is not required because both ends speak
-  Zenoh natively.
-- **Install method**: patched Trossen `xsarm_amd64_install.sh`
-  forked into `installers/`. Patch surface inherited from the
-  Lyrical-Luth fork's Phase-3a plan plus containerization-specific
-  adaptations: strip `sudo`, no-op the `udevadm trigger` (host-side
-  only), and replace `pip install` user-site installs with a
-  venv-based pattern for PEP 668 compliance.
+  Zenoh natively. **Status (2026-06-03):** the shape is proven against
+  this stack itself — the sibling repo
+  (https://github.com/hugo-bluecorn/pincherx-100-flutter-poc) shipped
+  a robot-side C++ JSON↔ROS gateway (`px100_zenoh_gateway`, v0.1.0)
+  plus a Flutter app (v0.2.0) that drove the real arm from Linux
+  desktop and from a physical Android phone over WiFi.
+- **Install method**: forked Interbotix repos, not a patched
+  installer. The Lyrical patches (C++20, `ament_target_dependencies`
+  removal, ConstSharedPtr callbacks, Qt6, ros2_control API) live as
+  `lyrical` branches on
+  `hugo-bluecorn/interbotix_ros_{core,manipulators,toolboxes}`, which
+  `docker/Dockerfile` clones and `colcon build`s directly when
+  `BUILD_INTERBOTIX=true`. Python deps install into a venv
+  (`--system-site-packages`) for PEP 668 compliance; udev stays
+  host-side. (The originally-planned `installers/` fork of Trossen's
+  `xsarm_amd64_install.sh` was never needed — the Dockerfile replaces
+  the installer wholesale.)
 
 ## Implementation phases (in order)
 
@@ -193,10 +204,10 @@ from Lyrical onward.**
    namespace). Both install `ros-lyrical-rmw-zenoh-cpp` and the
    custom entrypoint at `/px100-entrypoint.sh`. Per-role packages
    (e.g. `ros-lyrical-urdf-tutorial` for Phase 4) passed via
-   `EXTRA_PKGS`. Patched Trossen installer fork + colcon workspace
-   build deferred to Phase 5. Build both via `docker compose build`
-   or individually via `docker buildx build --load` with explicit
-   `--build-arg`.
+   `EXTRA_PKGS`. The Interbotix workspace build (cloning the
+   `hugo-bluecorn` lyrical-branch forks) deferred to Phase 5. Build
+   both via `docker compose build` or individually via
+   `docker buildx build --load` with explicit `--build-arg`.
 3. **Network + router (Phase 3 prototype, SUPERSEDED by Phase 4)** —
    single-shared-router + client-mode topology validated cross-container
    message flow as a first proof-of-life. This shape is retained as
@@ -216,11 +227,11 @@ from Lyrical onward.**
    `/robot_description` (robot → dev). Visually: rviz2 renders the
    URDF and reflects slider-driven joint state changes in real time.
    Robot-side router publishes port 7447 on the host LAN for the
-   future Phase 8 Flutter client. Runbook:
+   future Phase 7 Flutter client. Runbook:
    `runbook/04-topology-proof-urdf-tutorial.md`.
 5. **Controller container + USB pass-through + arm verification** —
    swap the `urdf_tutorial` publisher in the robot container for
-   `xs_sdk` / the patched Trossen workspace. Install Trossen's
+   `xs_sdk` / the forked-and-patched Interbotix workspace. Install Trossen's
    `99-interbotix-udev.rules` at `/etc/udev/rules.d/` on the host
    (relocated here from Phase 1 because it requires the U2D2 to be
    plugged in for verification). Reload udev rules
@@ -263,6 +274,14 @@ from Lyrical onward.**
    `zenoh-counter-flutter` template repo's Android branch. Goal:
    prove the data path end-to-end; not full Bluecorn integration.
    After Phase 7 the Docker-Lyrical runbook is considered complete.
+   **Status (2026-06-06):** the runbook chapter is not yet authored,
+   but the data path it would prove already shipped in the sibling
+   repo (https://github.com/hugo-bluecorn/pincherx-100-flutter-poc):
+   its Flutter app (v0.2.0) commands the real arm — from Linux
+   desktop and from a physical Pixel 9a over WiFi — via plain JSON to
+   the `px100_zenoh_gateway` C++ node (v0.1.0), rather than
+   subscribing ROS topics directly. State feedback over Zenoh is that
+   project's M3.
 
 ## Out of scope
 
@@ -286,8 +305,10 @@ from Lyrical onward.**
   past Humble. This is a community fork. Hardware-side issues (motor
   calibration, U2D2 firmware) escalate to ROBOTIS, not Trossen.
 - **Neither Trossen nor Docker officially support each other.** This
-  pivot proceeds knowing that. Workarounds for Trossen-installer
-  assumptions are documented in the patched `installers/` fork.
+  pivot proceeds knowing that. Workarounds for Trossen-stack
+  assumptions live in the `lyrical` branches of the forked Interbotix
+  repos (`hugo-bluecorn/interbotix_ros_*`) and in `docker/Dockerfile`
+  (venv for PEP 668, host-side udev, entrypoint symlink fallback).
 - **`--device` assignments are static at container create-time.** USB
   hot-plug requires `--device-cgroup-rule` major:minor whitelisting,
   or container restart on replug. Worse than libvirt's
@@ -348,11 +369,13 @@ from Lyrical onward.**
 - **Defaults unless deviation is necessary.** Use the tool's default
   port/path/name unless there's a concrete reason to override.
 - **Dockerfiles and Compose files are canonical.** Image definitions
-  live in version control; the patched installer fork lives in
-  `installers/`. Reproduce on any host via `docker compose build`.
+  live in version control; the Lyrical patches live in the forked
+  Interbotix repos (`hugo-bluecorn/interbotix_ros_*`, `lyrical`
+  branches) that the Dockerfile clones. Reproduce on any host via
+  `docker compose build`.
 - **Image tags at phase boundaries** replace qcow2 disk snapshots
   from the parent runbook. Tag after each phase's hardware
-  verification: `pincherx100-controller:phaseN`, etc.
+  verification: `px100-base:phase2`, `px100-robot:phaseN`, etc.
 - **Per-phase commits only after hardware verification.** Same
   cadence as the parent runbook.
 - **Inventory before install.** Same pattern as the parent runbook:
@@ -363,7 +386,8 @@ from Lyrical onward.**
 
 - Trossen X-series docs (ROS 2, preserved post-discontinuation):
   https://docs.trossenrobotics.com/interbotix_xsarms_docs/
-- Trossen install script (we patch this):
+- Trossen install script (superseded by the Dockerfile workspace
+  build; kept for reference):
   https://raw.githubusercontent.com/Interbotix/interbotix_ros_manipulators/main/interbotix_ros_xsarms/install/amd64/xsarm_amd64_install.sh
 - PincherX-100 discontinuation banner:
   https://www.trossenrobotics.com/pincherx100

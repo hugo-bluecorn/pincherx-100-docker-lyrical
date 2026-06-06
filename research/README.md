@@ -10,10 +10,15 @@ context.
 ## Architecture research (foundational)
 
 - **[docker-architecture.md](docker-architecture.md)** — primary-source
-  research synthesis produced before Phase 0, justifying every
-  architectural decision (Docker over VM, `rmw_zenoh_cpp` over DDS, the
-  two-container federated Zenoh topology, OSRF image tiers, XWayland for
-  rviz). The headline surprises that shaped the design live here.
+  research synthesis produced before Phase 0 (2026-05-23), justifying
+  the foundational decisions (Docker over VM, `rmw_zenoh_cpp` over DDS,
+  OSRF image tiers, XWayland for rviz). The headline surprises that
+  shaped the design live here. **Note its status banner**: the
+  topology and image-base recommendations it settled on (three
+  containers, dedicated router, client mode, single image) were
+  superseded by Phase 4's two-container, two-router, federated
+  pattern; and its "zenoh-dart does not exist" flag has since been
+  resolved.
 
 ## Python-free Flutter control (analysis chain)
 
@@ -43,14 +48,24 @@ graph, avoiding Python**. Read in order:
    C++ node: what it must replicate from `arm.py`, the kinematics-engine
    choice (B-PoE vs B-KDL), and the Flutter interface (a JSON Zenoh
    queryable — because raw Zenoh clients can't practically call ROS
-   services and Dart has no CDR codec).
+   services and Dart has no CDR codec). **Still future design** — its
+   joint-space-only sibling (no IK) shipped first; see item 5's note.
 5. **[poc-flutter-zenoh-control.md](poc-flutter-zenoh-control.md)** — *first
-   concrete POC.* A simple Flutter + `zenoh-dart` app (no rosbridge/foxglove,
-   no gateway): two buttons for home/sleep poses + per-joint jog sliders.
-   Direct joint-space commands (`JointGroupCommand` / `JointSingleCommand`)
-   over the ROS wire — no IK, no singularities. Verified message shapes,
-   joint limits, the mandatory Zenoh attachment, and the Dart recipe +
-   verification ladder.
+   concrete POC spec.* A simple Flutter + `zenoh-dart` app (no
+   rosbridge/foxglove, no gateway): two buttons for home/sleep poses +
+   per-joint jog sliders. Direct joint-space commands
+   (`JointGroupCommand` / `JointSingleCommand`) over the ROS wire — no
+   IK, no singularities. Verified message shapes, joint limits, the
+   mandatory Zenoh attachment, and the Dart recipe + verification
+   ladder. **Superseded 2026-06-02 — the direct-wire design was
+   rejected as Option 1.** The project chose its own Option 2, a thin
+   C++ JSON↔ROS gateway, designed and **implemented in the sibling
+   [pincherx-100-flutter-poc](https://github.com/hugo-bluecorn/pincherx-100-flutter-poc)
+   repo** (`px100_zenoh_gateway` v0.1.0 + Flutter app v0.2.0; verified
+   on the real arm and from an Android phone, 2026-06-03; chosen-design
+   doc: that repo's `research/poc-zenoh-json-gateway.md`). This doc
+   remains the source of the verified message shapes, pose arrays, and
+   joint limits the gateway reuses.
 
 ## Conventions
 

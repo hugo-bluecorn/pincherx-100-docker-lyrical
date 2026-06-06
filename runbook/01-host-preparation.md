@@ -8,9 +8,10 @@ pulled yet, no Trossen workspace built yet, no robot involved.
 
 The CLAUDE.md Phase 1 overview also mentions the Trossen udev rule and
 `/dev/ttyDXL` verification. Those steps actually require the U2D2 +
-arm to be plugged in, so this runbook moves them to **Phase 4
-(controller container + USB pass-through)**. Phase 1 here is purely
-host-level Docker setup.
+arm to be plugged in, so this runbook moves them to **Phase 5
+(controller container + USB pass-through,
+[05-controller-usb-verification.md](05-controller-usb-verification.md))**.
+Phase 1 here is purely host-level Docker setup.
 
 ## Goal
 

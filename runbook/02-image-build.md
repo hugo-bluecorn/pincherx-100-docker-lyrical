@@ -3,9 +3,11 @@
 Build the project's base Docker image. Single Dockerfile at
 `docker/Dockerfile`, extends OSRF's official ROS 2 Lyrical desktop-full
 image, adds `rmw_zenoh_cpp` and sets it as the default RMW. The image
-is named `px100-base:dev` and is the FROM target for the
-Trossen-workspace layer that comes in Phase 2b (not yet drafted; lands
-when the patched installer is written).
+is named `px100-base:dev`. (The Interbotix-workspace layer originally
+sketched as "Phase 2b + a patched installer" landed differently: Phase
+5 added a `BUILD_INTERBOTIX=true` build arg that clones the
+`hugo-bluecorn` lyrical-branch Interbotix forks and `colcon build`s
+them — no patched installer exists.)
 
 ## Goal
 
@@ -184,8 +186,7 @@ If all three tick, Phase 2 is complete.
 
 ## Snapshot point
 
-Tag the verified image to preserve the working state before Phase 3
-(or Phase 2b when it lands):
+Tag the verified image to preserve the working state before Phase 3:
 
 ```
 $ docker tag px100-base:dev px100-base:phase2
@@ -195,14 +196,17 @@ $ docker images px100-base
 The `phase2` tag is the project's analogue of qcow2 disk snapshots
 from the parent Humble runbook — a known-good restore point.
 
-## Deferred to Phase 2b
+## Deferred: the Interbotix workspace build
 
-The Trossen colcon workspace build is **not** in this phase. The
-patched installer fork needs writing first (see CLAUDE.md Phase 2
-description and `research/docker-architecture.md` "Trossen installer
-behavior in a container" section). When 2b lands, this Dockerfile
-gains a `COPY` of the patched installer + a `RUN` that executes it
-and `colcon build`s the resulting workspace.
+The Trossen colcon workspace build is **not** in this phase.
+*(What actually happened, for the record: the originally-planned
+"Phase 2b + patched installer fork" was never built. Phase 5 instead
+added a `BUILD_INTERBOTIX=true` build arg to this same Dockerfile
+that clones the `lyrical` branches of
+`hugo-bluecorn/interbotix_ros_{core,manipulators,toolboxes}` and
+`colcon build`s them, with Python deps in a PEP 668-compliant venv.
+See `docker/Dockerfile` and
+[05-controller-usb-verification.md](05-controller-usb-verification.md).)*
 
 ## Next
 

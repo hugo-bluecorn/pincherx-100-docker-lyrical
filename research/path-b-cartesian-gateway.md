@@ -2,6 +2,15 @@
 
 Date: 2026-05-29
 
+> **Status (2026-06-06): still future design.** This Cartesian/IK
+> gateway has not been built. Its **joint-space-only sibling** shipped
+> first: `px100_zenoh_gateway` (JSON-over-Zenoh, no IK) in the
+> [pincherx-100-flutter-poc](https://github.com/hugo-bluecorn/pincherx-100-flutter-poc)
+> repo, v0.1.0 — that node validates this doc's gateway concept
+> (rclcpp absorbs the rmw_zenoh wire; raw-Zenoh JSON for the app) on
+> the pose-command path. The IK engine choice and the queryable
+> interface below remain open for when Cartesian control begins.
+
 Third in the analysis chain for Python-free Flutter control of the
 PincherX-100, after
 [`interbotix-python-cpp-boundary.md`](interbotix-python-cpp-boundary.md)

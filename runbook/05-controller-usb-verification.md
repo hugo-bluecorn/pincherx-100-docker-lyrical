@@ -190,7 +190,8 @@ Unplug the arm PSU. Unplug the U2D2 if no further work this session.
 
 ## Next phase
 
-Phase 6 — pedagogical motion exercise (Lab 3 Code Example 2 adapted)
-with rviz2 in the dev container watching live motion. License caveat
-on the Babaiasl course (NOASSERTION non-commercial) applies — pattern
-reference only.
+[Phase 6 — pedagogical motion exercise](06-pedagogical-motion-exercise.md):
+a walkthrough of Babaiasl's *Modern Robotics* course Labs 3-9 against
+this stack, with rviz2 in the dev container watching live motion.
+License caveat on the Babaiasl course (NOASSERTION non-commercial)
+applies — pattern reference only.

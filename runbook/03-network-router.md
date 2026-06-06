@@ -1,5 +1,18 @@
 # 03 — Network and router
 
+> **Superseded by Phase 4 (2026-05-25, commit `c963992`) — historical
+> record.** This chapter's single-shared-router + client-mode topology
+> was replaced by the rmw_zenoh-canonical **two-container, two-router,
+> federated** pattern in
+> [04-topology-proof-urdf-tutorial.md](04-topology-proof-urdf-tutorial.md)
+> (see its "Why the pattern changed" section). The repo's current
+> `compose.yaml` no longer contains the `router`/`talker`/`listener`
+> services described below, so these steps no longer run against the
+> checked-out tree. Do not adopt this shape for new work. The
+> phase-numbering in this chapter's "Next" section also predates the
+> renumbering (controller+USB became Phase 5; the Flutter client became
+> Phase 7).
+
 Bring up the three-container Zenoh topology via Docker Compose and
 verify cross-container ROS 2 messaging. The artefacts that matter here
 are `compose.yaml` (in the repo root) and the `px100-base:dev` image

@@ -2,6 +2,36 @@
 
 Date: 2026-05-23
 
+> **Status (2026-06-06) — partially superseded; retained as the
+> Phase-0 historical record.** Four of this document's conclusions
+> were later revised by implementation:
+>
+> 1. **Topology.** The "three-container minimal topology" /
+>    "dedicated router container" / client-mode pattern recommended
+>    below (and validated empirically as the Phase-3 prototype) was
+>    replaced in Phase 4 by the rmw_zenoh-canonical **two-container,
+>    two-router, federated** pattern — each container runs its own
+>    `rmw_zenohd` beside its ROS 2 nodes; the dev-side router carries
+>    a one-direction `connect/endpoints` federation override. See
+>    `runbook/04-topology-proof-urdf-tutorial.md` § "Why the pattern
+>    changed".
+> 2. **Image base.** "Single `osrf/ros:lyrical-desktop-full-resolute`
+>    for all containers" was replaced in Phase 4 by two role-specific
+>    images from one parameterized Dockerfile
+>    (`ros:lyrical-ros-base-resolute` robot / `osrf` desktop-full dev).
+> 3. **`zenoh-dart` does not exist** was true of the `eclipse-zenoh`
+>    org and still is, but the flagged risk is resolved: the community
+>    binding [hugo-bluecorn/zenoh_dart](https://github.com/hugo-bluecorn/zenoh_dart)
+>    (pinned v0.18.0) is proven phone→real-arm in the sibling
+>    `pincherx-100-flutter-poc` repo (2026-06-03).
+> 4. **"Trossen installer requires patching"** resolved differently:
+>    no patched installer was ever written. The Lyrical patches live
+>    as `lyrical` branches on the `hugo-bluecorn/interbotix_ros_*`
+>    forks, which `docker/Dockerfile` clones and builds directly
+>    (`BUILD_INTERBOTIX=true`).
+>
+> The analysis below is unchanged.
+
 Primary-source research synthesis produced before Phase-0 of the
 containerized PincherX-100 runbook. Five parallel research passes
 against canonical upstream docs (Docker, ROS 2, Eclipse Zenoh,

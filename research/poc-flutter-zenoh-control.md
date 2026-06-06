@@ -2,6 +2,21 @@
 
 Date: 2026-05-29
 
+> **Superseded (2026-06-02) — this is the rejected Option 1.** The
+> project chose **Option 2, the C++ JSON gateway** (this doc's own
+> fallback, "the Path B direction anyway"). The app no longer
+> hand-rolls CDR + the attachment from Dart; a robot-side
+> `px100_zenoh_gateway` C++ node does it via `rclcpp`, and the app
+> speaks plain JSON. The chosen design — and its implementation
+> (gateway v0.1.0 + Flutter app v0.2.0, verified on the real arm and
+> from an Android phone, 2026-06-03) — lives in the sibling
+> [pincherx-100-flutter-poc](https://github.com/hugo-bluecorn/pincherx-100-flutter-poc)
+> repo (design doc: its `research/poc-zenoh-json-gateway.md`). This
+> document is retained as the analysis of the direct-wire path —
+> still the reference if a future need wants zero robot-side code,
+> and the source of the verified message shapes, pose arrays, and
+> joint limits the gateway reuses.
+
 Part of the Python-free Flutter analysis chain (see
 [`research/README.md`](README.md)). This is the first **concrete POC**:
 a simple Flutter app on a mobile device that talks to the robot over

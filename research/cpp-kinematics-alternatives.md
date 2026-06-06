@@ -2,6 +2,14 @@
 
 Date: 2026-05-29
 
+> **Premise correction (2026-06-06, Hugo):** this survey was written
+> under a "commercial product (Bluecorn)" assumption. These projects
+> are **not commercial products**. The permissive-license analysis
+> below stands as conservative guidance — it keeps the option open and
+> remains the relevant frame if commercial use ever materializes — but
+> "commercial product" should not be read as a statement about what
+> these repos are.
+
 Companion to [`interbotix-python-cpp-boundary.md`](interbotix-python-cpp-boundary.md).
 That analysis found the one capability a Python-free Flutter client loses
 is the **Cartesian IK/FK convenience layer**, which lives only in Python
